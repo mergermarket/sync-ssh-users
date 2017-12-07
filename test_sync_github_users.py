@@ -1,4 +1,5 @@
 import os
+import stat
 
 from unittest.mock import patch, MagicMock, Mock
 
@@ -7,8 +8,12 @@ from sh import id as id_, getent
 import sync_github_users
 
 
+def filemode(filepath):
+    return stat.filemode(os.stat(filepath).st_mode)
+
+
 @patch.object(sync_github_users.Github, 'get_organization', autospec=True)
-def test(get_organization):
+def test_adds_users(get_organization):
     # Given
     mock_key_1 = Mock()
     mock_key_1.key = 'ssh-rsa foo'
@@ -17,7 +22,7 @@ def test(get_organization):
     mock_key_3 = Mock()
     mock_key_3.key = 'ssh-rsa baz'
     mock_key_4 = Mock()
-    mock_key_4.key = 'ssh-rsa baz'
+    mock_key_4.key = 'ssh-rsa bat'
     
     mock_member_1 = Mock()
     mock_member_1.login = 'aad'
@@ -65,6 +70,27 @@ def test(get_organization):
     assert 'groups' in id_('bbe')
     assert 'groups' in id_('ccf')
 
+    assert 'aad' in getent('group', 'users')
+    assert 'bbe' in getent('group', 'users')
+    assert 'ccf' in getent('group', 'users')
+
     assert 'aad' in getent('group', 'wheel')
     assert 'bbe' in getent('group', 'wheel')
     assert 'ccf' in getent('group', 'wheel')
+
+    assert filemode('/home/aad/.ssh/authorized_keys') == '-rw-------'
+    assert filemode('/home/bbe/.ssh/authorized_keys') == '-rw-------'
+    assert filemode('/home/ccf/.ssh/authorized_keys') == '-rw-------'
+
+    with open('/home/aad/.ssh/authorized_keys') as f:
+        content = f.read()
+        assert 'ssh-rsa foo' in content
+
+    with open('/home/bbe/.ssh/authorized_keys') as f:
+        content = f.read()
+        assert 'ssh-rsa bar' in content
+        assert 'ssh-rsa baz' in content
+
+    with open('/home/ccf/.ssh/authorized_keys') as f:
+        content = f.read()
+        assert 'ssh-rsa bat' in content
