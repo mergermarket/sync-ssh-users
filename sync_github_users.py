@@ -21,14 +21,15 @@ class InfoFilter(logging.Filter):
 logger = logging.getLogger('__name__')
 logger.setLevel(logging.DEBUG)
 
-h1 = logging.StreamHandler(sys.stdout)
-h1.setLevel(logging.DEBUG)
-h1.addFilter(InfoFilter())
-h2 = logging.StreamHandler()
-h2.setLevel(logging.WARNING)
+stdout_handler = logging.StreamHandler(sys.stdout)
+stdout_handler.setLevel(logging.DEBUG)
+stdout_handler.addFilter(InfoFilter())
 
-logger.addHandler(h1)
-logger.addHandler(h2)
+stderr_handler = logging.StreamHandler(sys.sterr)
+stderr_handler.setLevel(logging.WARNING)
+
+logger.addHandler(stdout_handler)
+logger.addHandler(stderr_handler)
 
 
 def get_users_to_add(
