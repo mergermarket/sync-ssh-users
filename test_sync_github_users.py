@@ -3,7 +3,9 @@ import stat
 
 from unittest.mock import patch, MagicMock, Mock
 
-from sh import id as id_, getent
+from pytest import raises
+
+from sh import id as id_, getent, useradd, ErrorReturnCode
 
 import sync_github_users
 
@@ -12,9 +14,7 @@ def filemode(filepath):
     return stat.filemode(os.stat(filepath).st_mode)
 
 
-@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
-def test_adds_users(get_organization):
-    # Given
+def setup_mock_teams():
     mock_key_1 = Mock()
     mock_key_1.key = 'ssh-rsa foo'
     mock_key_2 = Mock()
@@ -23,7 +23,7 @@ def test_adds_users(get_organization):
     mock_key_3.key = 'ssh-rsa baz'
     mock_key_4 = Mock()
     mock_key_4.key = 'ssh-rsa bat'
-    
+
     mock_member_1 = Mock()
     mock_member_1.login = 'aad'
     mock_member_1.get_keys.return_value = [mock_key_1]
@@ -56,8 +56,14 @@ def test_adds_users(get_organization):
     mock_teams = MagicMock()
     mock_teams.__iter__.return_value = [mock_team_1, mock_team_2, mock_team_3]
 
-    get_organization.return_value.get_teams.return_value = mock_teams
-    
+    return mock_teams
+
+
+@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
+def test_adds_users(get_organization):
+    # Given
+    get_organization.return_value.get_teams.return_value = setup_mock_teams()
+
     os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
     os.environ['GITHUB_TOKEN'] = 'token'
     os.environ['GITHUB_ORG'] = 'org'
@@ -78,6 +84,20 @@ def test_adds_users(get_organization):
     assert 'bbe' in getent('group', 'wheel')
     assert 'ccf' in getent('group', 'wheel')
 
+
+@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
+def test_adds_ssh_keys(get_organization):
+    # Given
+    get_organization.return_value.get_teams.return_value = setup_mock_teams()
+
+    os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
+    os.environ['GITHUB_TOKEN'] = 'token'
+    os.environ['GITHUB_ORG'] = 'org'
+
+    # When
+    sync_github_users.main()
+
+    # Then
     assert filemode('/home/aad/.ssh/authorized_keys') == '-rw-------'
     assert filemode('/home/bbe/.ssh/authorized_keys') == '-rw-------'
     assert filemode('/home/ccf/.ssh/authorized_keys') == '-rw-------'
@@ -94,3 +114,26 @@ def test_adds_users(get_organization):
     with open('/home/ccf/.ssh/authorized_keys') as f:
         content = f.read()
         assert 'ssh-rsa bat' in content
+
+
+@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
+def test_removes_users(get_organization):
+    # Given
+    get_organization.return_value.get_teams.return_value = setup_mock_teams()
+
+    sync_github_users.add_user('foo')
+
+    os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
+    os.environ['GITHUB_TOKEN'] = 'token'
+    os.environ['GITHUB_ORG'] = 'org'
+
+    # When
+    sync_github_users.main()
+
+    # Then
+    with raises(ErrorReturnCode):
+        id_('foo')
+
+    assert 'foo' not in getent('group', 'users')
+
+    assert 'foo' not in getent('group', 'wheel')

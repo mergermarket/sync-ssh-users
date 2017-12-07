@@ -14,7 +14,7 @@ RUN yum install -y gcc python36-devel && \
 COPY test_sync_github_users.py /usr/bin/
 
 RUN mypy --ignore-missing-imports /usr/bin/sync_github_users.py
-RUN pytest /usr/bin/test_sync_github_users.py
+RUN pytest -v /usr/bin/test_sync_github_users.py
 
 FROM base
 
