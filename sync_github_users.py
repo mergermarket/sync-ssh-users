@@ -44,11 +44,11 @@ def get_users_to_add(
         if t.name.lower() in normalised_ssh_teams
     ]
 
-    return list({
+    return [
         member
         for team in teams
         for member in team.get_members()
-    })
+    ]
 
 
 def add_user(username: str):
