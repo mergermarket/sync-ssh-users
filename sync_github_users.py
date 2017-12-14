@@ -83,18 +83,18 @@ def add_ssh_keys(github_user):
     _write_ssh_file(key_file, key_file_content, username)
 
 
-def _write_ssh_file(path, content, username):
+def _write_ssh_file(path: str, content: str, username: str):
     temp_file = f'{path}.tmp'
     logger.info('Writing keys to temp path: %s', temp_file)
     with open(temp_file, 'w+') as f:
         f.write(content)
     logger.info('Moving temp path to: %s', path)
+    shutil.chown(temp_file, username, USERS_GROUP)
+    os.chmod(temp_file, S_IREAD | S_IWRITE)
     os.rename(temp_file, path)
-    shutil.chown(path, username, USERS_GROUP)
-    os.chmod(path, S_IREAD | S_IWRITE)
 
 
-def _ensure_directory(path):
+def _ensure_directory(path: str):
     if not os.path.isdir(path):
         logger.info('Creating path: %s', path)
         os.mkdir(path)
@@ -108,7 +108,7 @@ def find_users_to_remove(valid_users: Sequence[str]) -> Sequence[str]:
 
 def remove_user(username: str):
     try:
-        userdel(username)
+        userdel('--remove', '--force', username)
     except ErrorReturnCode as e:
         logger.error(e)
 

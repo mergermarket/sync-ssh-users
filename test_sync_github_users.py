@@ -137,3 +137,5 @@ def test_removes_users(get_organization):
     assert 'foo' not in getent('group', 'users')
 
     assert 'foo' not in getent('group', 'wheel')
+
+    assert not os.path.isdir('/home/foo')
