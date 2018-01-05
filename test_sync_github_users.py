@@ -36,11 +36,15 @@ def setup_mock_teams():
     mock_member_3.login = 'ccf'
     mock_member_3.get_keys.return_value = [mock_key_4]
 
+    mock_member_4 = Mock()
+    mock_member_4.login = 'ddg'
+    mock_member_4.get_keys.return_value = []
+
     mock_members_1 = MagicMock()
     mock_members_1.__iter__.return_value = [mock_member_1, mock_member_2]
 
     mock_members_2 = MagicMock()
-    mock_members_2.__iter__.return_value = [mock_member_3]
+    mock_members_2.__iter__.return_value = [mock_member_3, mock_member_4]
 
     mock_team_1 = Mock()
     mock_team_1.name = 'foo'
@@ -139,3 +143,20 @@ def test_removes_users(get_organization):
     assert 'foo' not in getent('group', 'wheel')
 
     assert not os.path.isdir('/home/foo')
+
+
+@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
+def test_handles_users_with_no_keys(get_organization):
+    # Given
+    get_organization.return_value.get_teams.return_value = setup_mock_teams()
+
+    os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
+    os.environ['GITHUB_TOKEN'] = 'token'
+    os.environ['GITHUB_ORG'] = 'org'
+
+    # When
+    sync_github_users.main()
+
+    # Then
+    with open('/home/ddg/.ssh/authorized_keys') as f:
+        assert len(f.read()) == 0
