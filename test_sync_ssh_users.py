@@ -10,7 +10,7 @@ from pytest import raises
 import boto3
 from sh import id as id_, getent, useradd, ErrorReturnCode
 
-import sync_github_users
+import sync_ssh_users
 
 
 def filemode(filepath):
@@ -55,7 +55,7 @@ class TestSync(unittest.TestCase):
 
     def test_adds_users(self):
         # When
-        sync_github_users.main()
+        sync_ssh_users.main()
 
         # Then
         assert 'groups' in id_('aad')
@@ -73,7 +73,7 @@ class TestSync(unittest.TestCase):
 
     def test_adds_ssh_keys(self):
         # When
-        sync_github_users.main()
+        sync_ssh_users.main()
 
         # Then
         assert filemode('/home/aad/.ssh/authorized_keys') == '-rw-------'
@@ -96,10 +96,10 @@ class TestSync(unittest.TestCase):
 
     def test_removes_users(self):
         # Given
-        sync_github_users.add_user('foo')
+        sync_ssh_users.add_user('foo')
 
         # When
-        sync_github_users.main()
+        sync_ssh_users.main()
 
         # Then
         with raises(ErrorReturnCode):
@@ -114,7 +114,7 @@ class TestSync(unittest.TestCase):
 
     def test_handles_users_with_no_keys(self):
         # When
-        sync_github_users.main()
+        sync_ssh_users.main()
 
         # Then
         with open('/home/ddg/.ssh/authorized_keys') as f:
