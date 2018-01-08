@@ -11,14 +11,14 @@ RUN yum install -y gcc python36-devel && \
 
 FROM test_base as tests
 
-COPY test_sync_github_users.py /usr/bin/
-COPY sync_github_users.py /usr/bin/
+COPY test_sync_ssh_users.py /usr/bin/
+COPY sync_ssh_users.py /usr/bin/
 
-RUN mypy --ignore-missing-imports /usr/bin/sync_github_users.py
-RUN pytest -v /usr/bin/test_sync_github_users.py
+RUN mypy --ignore-missing-imports /usr/bin/sync_ssh_users.py
+RUN pytest -v /usr/bin/test_sync_ssh_users.py
 
 FROM base
 
-COPY sync_github_users.py /usr/bin/
+COPY sync_ssh_users.py /usr/bin/
 
-CMD ["python3.6", "/usr/bin/sync_github_users.py"]
+CMD ["python3.6", "/usr/bin/sync_ssh_users.py"]
