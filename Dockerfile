@@ -2,12 +2,12 @@ FROM amazonlinux AS base
 
 RUN yum install -y python36-pip shadow-utils
 
-RUN pip-3.6 install --no-cache-dir pygithub sh
+RUN pip-3.6 install --no-cache-dir boto3 sh
 
 FROM base as test_base
 
 RUN yum install -y gcc python36-devel && \
-    pip-3.6 install --no-cache-dir pytest mypy
+    pip-3.6 install --no-cache-dir pytest mypy moto
 
 FROM test_base as tests
 

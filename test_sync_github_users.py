@@ -1,10 +1,13 @@
+import json
 import os
 import stat
 
-from unittest.mock import patch, MagicMock, Mock
+import unittest
 
+from moto import mock_s3
 from pytest import raises
 
+import boto3
 from sh import id as id_, getent, useradd, ErrorReturnCode
 
 import sync_github_users
@@ -14,149 +17,105 @@ def filemode(filepath):
     return stat.filemode(os.stat(filepath).st_mode)
 
 
-def setup_mock_teams():
-    mock_key_1 = Mock()
-    mock_key_1.key = 'ssh-rsa foo'
-    mock_key_2 = Mock()
-    mock_key_2.key = 'ssh-rsa bar'
-    mock_key_3 = Mock()
-    mock_key_3.key = 'ssh-rsa baz'
-    mock_key_4 = Mock()
-    mock_key_4.key = 'ssh-rsa bat'
+class TestSync(unittest.TestCase):
 
-    mock_member_1 = Mock()
-    mock_member_1.login = 'aad'
-    mock_member_1.get_keys.return_value = [mock_key_1]
+    S3_BUCKET = 'bucket'
 
-    mock_member_2 = Mock()
-    mock_member_2.login = 'bbe'
-    mock_member_2.get_keys.return_value = [mock_key_2, mock_key_3]
+    def setUp(self):
+        self._m = mock_s3()
+        self._m.start()
 
-    mock_member_3 = Mock()
-    mock_member_3.login = 'ccf'
-    mock_member_3.get_keys.return_value = [mock_key_4]
+        s3_bucket = boto3.resource('s3').create_bucket(Bucket=self.S3_BUCKET)
 
-    mock_member_4 = Mock()
-    mock_member_4.login = 'ddg'
-    mock_member_4.get_keys.return_value = []
+        foo_data = {
+            'members': [
+                {'login': 'aad', 'ssh_keys': ['ssh-rsa foo']},
+                {'login': 'bbe', 'ssh_keys': ['ssh-rsa bar', 'ssh-rsa baz']},
+            ]
+        }
 
-    mock_members_1 = MagicMock()
-    mock_members_1.__iter__.return_value = [mock_member_1, mock_member_2]
+        bar_data = {
+            'members': [
+                {'login': 'ccf', 'ssh_keys': ['ssh-rsa bat']},
+                {'login': 'ddg', 'ssh_keys': []},
+            ]
+        }
 
-    mock_members_2 = MagicMock()
-    mock_members_2.__iter__.return_value = [mock_member_3, mock_member_4]
+        baz_data = {'members': []}
 
-    mock_team_1 = Mock()
-    mock_team_1.name = 'foo'
-    mock_team_1.get_members.return_value = mock_members_1
+        s3_bucket.Object('teams/foo.json').put(Body=json.dumps(foo_data))
+        s3_bucket.Object('teams/bar.json').put(Body=json.dumps(bar_data))
+        s3_bucket.Object('teams/baz.json').put(Body=json.dumps(baz_data))
 
-    mock_team_2 = Mock()
-    mock_team_2.name = 'bar'
-    mock_team_2.get_members.return_value = mock_members_2
+        os.environ['SSH_TEAMS'] = 'foo,Bar'
+        os.environ['S3_BUCKET'] = self.S3_BUCKET
 
-    mock_team_3 = Mock()
-    mock_team_3.name = 'baz'
+    def tearDown(self):
+        self._m.stop()
 
-    mock_teams = MagicMock()
-    mock_teams.__iter__.return_value = [mock_team_1, mock_team_2, mock_team_3]
+    def test_adds_users(self):
+        # When
+        sync_github_users.main()
 
-    return mock_teams
+        # Then
+        assert 'groups' in id_('aad')
+        assert 'groups' in id_('bbe')
+        assert 'groups' in id_('ccf')
 
+        assert 'aad' in getent('group', 'users')
+        assert 'bbe' in getent('group', 'users')
+        assert 'ccf' in getent('group', 'users')
 
-@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
-def test_adds_users(get_organization):
-    # Given
-    get_organization.return_value.get_teams.return_value = setup_mock_teams()
-
-    os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
-    os.environ['GITHUB_TOKEN'] = 'token'
-    os.environ['GITHUB_ORG'] = 'org'
-
-    # When
-    sync_github_users.main()
-
-    # Then
-    assert 'groups' in id_('aad')
-    assert 'groups' in id_('bbe')
-    assert 'groups' in id_('ccf')
-
-    assert 'aad' in getent('group', 'users')
-    assert 'bbe' in getent('group', 'users')
-    assert 'ccf' in getent('group', 'users')
-
-    assert 'aad' in getent('group', 'wheel')
-    assert 'bbe' in getent('group', 'wheel')
-    assert 'ccf' in getent('group', 'wheel')
+        assert 'aad' in getent('group', 'wheel')
+        assert 'bbe' in getent('group', 'wheel')
+        assert 'ccf' in getent('group', 'wheel')
 
 
-@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
-def test_adds_ssh_keys(get_organization):
-    # Given
-    get_organization.return_value.get_teams.return_value = setup_mock_teams()
+    def test_adds_ssh_keys(self):
+        # When
+        sync_github_users.main()
 
-    os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
-    os.environ['GITHUB_TOKEN'] = 'token'
-    os.environ['GITHUB_ORG'] = 'org'
+        # Then
+        assert filemode('/home/aad/.ssh/authorized_keys') == '-rw-------'
+        assert filemode('/home/bbe/.ssh/authorized_keys') == '-rw-------'
+        assert filemode('/home/ccf/.ssh/authorized_keys') == '-rw-------'
 
-    # When
-    sync_github_users.main()
+        with open('/home/aad/.ssh/authorized_keys') as f:
+            content = f.read()
+            assert 'ssh-rsa foo' in content
 
-    # Then
-    assert filemode('/home/aad/.ssh/authorized_keys') == '-rw-------'
-    assert filemode('/home/bbe/.ssh/authorized_keys') == '-rw-------'
-    assert filemode('/home/ccf/.ssh/authorized_keys') == '-rw-------'
+        with open('/home/bbe/.ssh/authorized_keys') as f:
+            content = f.read()
+            assert 'ssh-rsa bar' in content
+            assert 'ssh-rsa baz' in content
 
-    with open('/home/aad/.ssh/authorized_keys') as f:
-        content = f.read()
-        assert 'ssh-rsa foo' in content
-
-    with open('/home/bbe/.ssh/authorized_keys') as f:
-        content = f.read()
-        assert 'ssh-rsa bar' in content
-        assert 'ssh-rsa baz' in content
-
-    with open('/home/ccf/.ssh/authorized_keys') as f:
-        content = f.read()
-        assert 'ssh-rsa bat' in content
+        with open('/home/ccf/.ssh/authorized_keys') as f:
+            content = f.read()
+            assert 'ssh-rsa bat' in content
 
 
-@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
-def test_removes_users(get_organization):
-    # Given
-    get_organization.return_value.get_teams.return_value = setup_mock_teams()
+    def test_removes_users(self):
+        # Given
+        sync_github_users.add_user('foo')
 
-    sync_github_users.add_user('foo')
+        # When
+        sync_github_users.main()
 
-    os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
-    os.environ['GITHUB_TOKEN'] = 'token'
-    os.environ['GITHUB_ORG'] = 'org'
+        # Then
+        with raises(ErrorReturnCode):
+            id_('foo')
 
-    # When
-    sync_github_users.main()
+        assert 'foo' not in getent('group', 'users')
 
-    # Then
-    with raises(ErrorReturnCode):
-        id_('foo')
+        assert 'foo' not in getent('group', 'wheel')
 
-    assert 'foo' not in getent('group', 'users')
-
-    assert 'foo' not in getent('group', 'wheel')
-
-    assert not os.path.isdir('/home/foo')
+        assert not os.path.isdir('/home/foo')
 
 
-@patch.object(sync_github_users.Github, 'get_organization', autospec=True)
-def test_handles_users_with_no_keys(get_organization):
-    # Given
-    get_organization.return_value.get_teams.return_value = setup_mock_teams()
+    def test_handles_users_with_no_keys(self):
+        # When
+        sync_github_users.main()
 
-    os.environ['GITHUB_SSH_TEAMS'] = 'foo,Bar'
-    os.environ['GITHUB_TOKEN'] = 'token'
-    os.environ['GITHUB_ORG'] = 'org'
-
-    # When
-    sync_github_users.main()
-
-    # Then
-    with open('/home/ddg/.ssh/authorized_keys') as f:
-        assert len(f.read()) == 0
+        # Then
+        with open('/home/ddg/.ssh/authorized_keys') as f:
+            assert len(f.read()) == 0
