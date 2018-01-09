@@ -97,15 +97,15 @@ def add_ssh_keys(user):
         _write_ssh_file(key_file, key_file_content, username)
 
 
-def _file_has_changed(key_file, key_file_content):
-    if not os.path.exists(key_file):
+def _file_has_changed(file, file_content):
+    if not os.path.exists(file):
         return True
-    key_data = key_file_content.encode('utf-8')
-    with open(key_file, 'rb') as f:
-        existing_key_data = f.read()
-    if existing_key_data != key_data:
+    data = file_content.encode('utf-8')
+    with open(file, 'rb') as f:
+        existing_data = f.read()
+    if existing_data != data:
         return True
-    return md5(key_data).hexdigest() != md5(existing_key_data).hexdigest()
+    return md5(data).hexdigest() != md5(existing_data).hexdigest()
 
 
 def _write_ssh_file(path: str, content: str, username: str):
