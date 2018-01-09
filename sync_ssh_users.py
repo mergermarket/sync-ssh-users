@@ -1,4 +1,5 @@
 from collections import namedtuple
+from hashlib import md5
 import json
 import logging
 import os
@@ -91,8 +92,20 @@ def add_ssh_keys(user):
 
     key_file = os.path.join(ssh_directory, 'authorized_keys')
 
-    _ensure_directory(ssh_directory)
-    _write_ssh_file(key_file, key_file_content, username)
+    if _file_has_changed(key_file, key_file_content):
+        _ensure_directory(ssh_directory)
+        _write_ssh_file(key_file, key_file_content, username)
+
+
+def _file_has_changed(file, file_content):
+    if not os.path.exists(file):
+        return True
+    data = file_content.encode('utf-8')
+    with open(file, 'rb') as f:
+        existing_data = f.read()
+    if existing_data != data:
+        return True
+    return md5(data).hexdigest() != md5(existing_data).hexdigest()
 
 
 def _write_ssh_file(path: str, content: str, username: str):

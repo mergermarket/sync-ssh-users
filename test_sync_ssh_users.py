@@ -119,3 +119,21 @@ class TestSync(unittest.TestCase):
         # Then
         with open('/home/ddg/.ssh/authorized_keys') as f:
             assert len(f.read()) == 0
+
+    def test_does_not_write_keys_if_no_change(self):
+        # Given
+        user = sync_ssh_users.User('aad', ['ssh-rsa foo'])
+        sync_ssh_users.add_user(user.login)
+        sync_ssh_users.add_ssh_keys(user)
+
+        modified_time = os.stat(f'/home/{user.login}/.ssh/authorized_keys')\
+            .st_mtime
+
+        # When
+        sync_ssh_users.main()
+
+        # Then
+        latest_modified_time = os.stat(
+            f'/home/{user.login}/.ssh/authorized_keys'
+        ).st_mtime
+        assert latest_modified_time == modified_time
